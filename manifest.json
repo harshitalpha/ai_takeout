@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "AI Takeout",
+  "version": "1.1.0",
+  "description": "Your chats, to go. Export AI conversations to continue anywhere.",
+  "permissions": [
+    "activeTab",
+    "clipboardWrite",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://chat.openai.com/*",
+        "*://chatgpt.com/*",
+        "*://gemini.google.com/*",
+        "*://www.perplexity.ai/*",
+        "*://claude.ai/*"
+      ],
+      "js": [
+        "content/extractors/chatgpt.js",
+        "content/extractors/gemini.js",
+        "content/extractors/perplexity.js",
+        "content/extractors/claude.js",
+        "content/extractors/generic.js",
+        "content/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Takeout</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <img src="../icons/icon48.png" alt="AI Takeout" class="logo-icon">
+      </div>
+      <div class="header-text">
+        <h1 class="title">AI Takeout</h1>
+        <p class="subtitle">Export, download & summarize AI chats</p>
+      </div>
+      <button id="theme-toggle" class="theme-toggle" title="Toggle dark mode">
+        <svg class="theme-icon sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"/>
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+        <svg class="theme-icon moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </header>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>Detecting conversation...</p>
+    </div>
+
+    <div id="error" class="error hidden">
+      <div class="error-icon">!</div>
+      <p id="error-message">No conversation detected</p>
+      <p class="error-hint">Make sure you're on a supported AI chat page</p>
+    </div>
+
+    <div id="content" class="content hidden">
+      <div class="stats-card">
+        <div class="stat">
+          <div class="stat-icon source-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-label">Source</span>
+            <span id="source" class="stat-value">ChatGPT</span>
+          </div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <div class="stat-icon message-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-label">Messages</span>
+            <span id="message-count" class="stat-value">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Mode Selector -->
+      <div class="export-mode-selector">
+        <label class="format-label">Export Mode</label>
+        <div class="mode-buttons">
+          <button class="mode-btn active" data-mode="all">All Messages</button>
+          <button class="mode-btn" data-mode="questions">Questions Only</button>
+          <button class="mode-btn" data-mode="select">Select Messages</button>
+        </div>
+      </div>
+
+      <!-- Message Selection List (hidden by default) -->
+      <div id="message-selector" class="message-selector hidden">
+        <div class="select-actions">
+          <button id="select-all-btn" class="select-action-btn">Select All</button>
+          <button id="select-none-btn" class="select-action-btn">Select None</button>
+        </div>
+        <div id="message-list" class="message-list">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <div class="format-selector">
+        <label class="format-label">Export Format</label>
+        <div class="format-grid">
+          <button class="format-btn active" data-format="standard">
+            <svg class="format-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14,2 14,8 20,8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            <span class="format-name">Standard</span>
+            <span class="format-desc">With context header</span>
+          </button>
+          <button class="format-btn" data-format="ai-summary">
+            <!-- Gemini sparkle logo -->
+            <svg class="format-icon gemini-icon" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="currentColor"/>
+              <path d="M18 14L18.75 16.25L21 17L18.75 17.75L18 20L17.25 17.75L15 17L17.25 16.25L18 14Z" fill="currentColor"/>
+              <path d="M6 14L6.5 15.5L8 16L6.5 16.5L6 18L5.5 16.5L4 16L5.5 15.5L6 14Z" fill="currentColor"/>
+            </svg>
+            <span class="format-name">AI Summary</span>
+            <span class="format-desc">Gemini-powered</span>
+          </button>
+          <button class="format-btn" data-format="json">
+            <svg class="format-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16,18 22,12 16,6"/>
+              <polyline points="8,6 2,12 8,18"/>
+            </svg>
+            <span class="format-name">JSON</span>
+            <span class="format-desc">Structured data</span>
+          </button>
+          <button class="format-btn" data-format="compact">
+            <svg class="format-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <path d="M3 9h18"/>
+              <path d="M9 21V9"/>
+            </svg>
+            <span class="format-name">Compact</span>
+            <span class="format-desc">Raw messages only</span>
+          </button>
+          <button class="format-btn" data-format="summary">
+            <svg class="format-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 6h16"/>
+              <path d="M4 12h10"/>
+              <path d="M4 18h6"/>
+            </svg>
+            <span class="format-name">Quick Summary</span>
+            <span class="format-desc">Key points extracted</span>
+          </button>
+        </div>
+        <!-- Hidden select for backwards compatibility -->
+        <select id="format" class="format-select hidden">
+          <option value="standard">Standard (Markdown)</option>
+          <option value="compact">Compact</option>
+          <option value="json">JSON</option>
+          <option value="summary">Quick Summary</option>
+          <option value="ai-summary">AI Summary (Gemini)</option>
+        </select>
+      </div>
+
+
+      <div class="actions">
+        <button id="copy-btn" class="btn btn-primary">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy to Clipboard
+        </button>
+        <button id="download-btn" class="btn btn-secondary">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7,10 12,15 17,10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Download as File
+        </button>
+      </div>
+
+      <details class="preview-section">
+        <summary class="preview-toggle">
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9,18 15,12 9,6"></polyline>
+          </svg>
+          Preview conversation
+        </summary>
+        <div id="preview" class="preview-content"></div>
+      </details>
+    </div>
+
+    <div id="toast" class="toast hidden">
+      <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="20,6 9,17 4,12"></polyline>
+      </svg>
+      <span id="toast-message">Copied to clipboard!</span>
+    </div>
+
+    <!-- API Key Setup Modal -->
+    <div id="api-key-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <span class="modal-icon">🔑</span>
+          <h3>Setup Gemini API Key</h3>
+        </div>
+
+        <div class="privacy-notice">
+          <strong>🔒 Your key stays private:</strong>
+          <ul>
+            <li>Stored only in YOUR browser</li>
+            <li>Never sent to us or any third party</li>
+            <li>Only used to call Google's Gemini API</li>
+            <li>You can delete it anytime</li>
+          </ul>
+        </div>
+
+        <p class="modal-text">
+          Get your free API key from <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a> (takes 30 seconds)
+        </p>
+
+        <div class="api-key-input-group">
+          <input type="password" id="api-key-input" class="api-key-input" placeholder="Paste your Gemini API key here">
+          <button id="toggle-key-visibility" class="toggle-visibility-btn" type="button">
+            <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-actions">
+          <button id="save-api-key-btn" class="btn btn-primary">Save Key</button>
+          <button id="cancel-api-key-btn" class="btn btn-secondary">Cancel</button>
+        </div>
+
+        <div id="api-key-status" class="api-key-status hidden"></div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <div class="footer-links">
+        <a href="https://forms.gle/RzsesyWyqcDvpRCz5" target="_blank" class="feedback-link">
+          <svg class="feedback-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          Feedback
+        </a>
+        <span class="footer-divider">|</span>
+        <a href="#" id="manage-api-key" class="feedback-link">
+          <svg class="feedback-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+          </svg>
+          <span id="api-key-link-text">API Key</span>
+        </a>
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
