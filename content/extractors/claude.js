@@ -11,58 +11,79 @@ const ClaudeExtractor = {
   extract() {
     const messages = [];
 
-    // Claude.ai structures conversations with human and assistant turns
-    // Look for message containers with role indicators
+    // Claude.ai DOM structure:
+    // - User messages: [data-testid="user-message"] with class font-user-message
+    // - Assistant messages: div.standard-markdown containing p.font-claude-response-body
+    // Both are inside the conversation scroll area
 
-    // Primary selector: Look for message containers
-    const messageContainers = document.querySelectorAll('[data-testid*="message"], [class*="message-content"], [class*="conversation-turn"]');
+    const userMessages = document.querySelectorAll('[data-testid="user-message"]');
+    const assistantMessages = document.querySelectorAll('.standard-markdown');
 
-    if (messageContainers.length > 0) {
-      for (const container of messageContainers) {
-        const role = this.detectRole(container);
-        if (!role) continue;
+    // Collect all messages with their DOM elements for ordering
+    const allTurns = [];
 
-        const content = this.extractContent(container);
+    for (const el of userMessages) {
+      allTurns.push({ element: el, role: 'user' });
+    }
+
+    for (const el of assistantMessages) {
+      // Only include standard-markdown blocks that contain Claude's response body
+      // (avoid picking up other markdown blocks that aren't assistant messages)
+      if (el.querySelector('.font-claude-response-body') || el.closest('[class*="response"]')) {
+        allTurns.push({ element: el, role: 'assistant' });
+      }
+    }
+
+    // If no assistant messages matched with the strict check, include all standard-markdown blocks
+    const hasAssistant = allTurns.some(t => t.role === 'assistant');
+    if (!hasAssistant && assistantMessages.length > 0) {
+      for (const el of assistantMessages) {
+        allTurns.push({ element: el, role: 'assistant' });
+      }
+    }
+
+    // Sort by DOM position to maintain conversation order
+    if (allTurns.length > 0) {
+      allTurns.sort((a, b) => {
+        const pos = a.element.compareDocumentPosition(b.element);
+        return pos & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+
+      for (const turn of allTurns) {
+        const content = this.extractContent(turn.element);
         if (content) {
-          messages.push({ role, content });
+          messages.push({ role: turn.role, content });
         }
       }
     }
 
-    // Fallback: Try to find human/assistant blocks
+    // Fallback: try broader selectors
     if (messages.length === 0) {
-      // Look for the conversation thread
-      const thread = document.querySelector('[class*="thread"], [class*="conversation"], main');
+      const userEls = document.querySelectorAll('[class*="font-user-message"]');
+      const assistantEls = document.querySelectorAll('[class*="font-claude-response"]');
+      const fallbackTurns = [];
 
-      if (thread) {
-        // Find alternating human/assistant blocks
-        const blocks = thread.querySelectorAll('[class*="human"], [class*="assistant"], [class*="user"], [class*="claude"]');
-
-        for (const block of blocks) {
-          const className = block.className.toLowerCase();
-          const role = (className.includes('human') || className.includes('user')) ? 'user' : 'assistant';
-
-          const content = this.extractContent(block);
-          if (content) {
-            messages.push({ role, content });
-          }
+      for (const el of userEls) {
+        fallbackTurns.push({ element: el, role: 'user' });
+      }
+      for (const el of assistantEls) {
+        // Get the closest parent that wraps the full response
+        const container = el.closest('.standard-markdown') || el.closest('[class*="markdown"]') || el;
+        if (!fallbackTurns.some(t => t.element === container && t.role === 'assistant')) {
+          fallbackTurns.push({ element: container, role: 'assistant' });
         }
       }
-    }
 
-    // Another fallback: Look for prose content with role detection
-    if (messages.length === 0) {
-      const proseBlocks = document.querySelectorAll('[class*="prose"], .markdown-content');
+      if (fallbackTurns.length > 0) {
+        fallbackTurns.sort((a, b) => {
+          const pos = a.element.compareDocumentPosition(b.element);
+          return pos & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+        });
 
-      for (const block of proseBlocks) {
-        // Try to determine role from parent or sibling elements
-        const parent = block.closest('[class*="message"], [class*="turn"]');
-        const role = this.detectRole(parent || block);
-
-        if (role) {
-          const content = this.extractContent(block);
+        for (const turn of fallbackTurns) {
+          const content = this.extractContent(turn.element);
           if (content) {
-            messages.push({ role, content });
+            messages.push({ role: turn.role, content });
           }
         }
       }
@@ -71,41 +92,16 @@ const ClaudeExtractor = {
     return messages;
   },
 
-  detectRole(element) {
-    if (!element) return null;
-
-    // Check data attributes
-    const testId = element.getAttribute('data-testid') || '';
-    if (testId.includes('human') || testId.includes('user')) return 'user';
-    if (testId.includes('assistant') || testId.includes('claude')) return 'assistant';
-
-    // Check class names
-    const className = element.className?.toLowerCase() || '';
-    if (className.includes('human') || className.includes('user')) return 'user';
-    if (className.includes('assistant') || className.includes('claude') || className.includes('ai')) return 'assistant';
-
-    // Check for role indicators in the content
-    const text = element.textContent?.slice(0, 100).toLowerCase() || '';
-    if (text.startsWith('you:') || text.includes('human:')) return 'user';
-    if (text.startsWith('claude:') || text.includes('assistant:')) return 'assistant';
-
-    // Check parent elements
-    const parent = element.parentElement;
-    if (parent && parent !== document.body) {
-      return this.detectRole(parent);
-    }
-
-    return null;
-  },
-
   extractContent(element) {
     if (!element) return '';
 
     // Clone to avoid DOM modifications
     const clone = element.cloneNode(true);
 
-    // Remove UI elements
-    clone.querySelectorAll('button, [class*="action"], [class*="toolbar"], [class*="copy"], [class*="avatar"]').forEach(el => el.remove());
+    // Remove UI elements (buttons, action bars, toolbars, avatars, file thumbnails)
+    clone.querySelectorAll(
+      'button, [class*="action-bar"], [class*="toolbar"], [class*="copy"], [class*="avatar"], [data-testid="file-thumbnail"]'
+    ).forEach(el => el.remove());
 
     // Remove role labels if present
     clone.querySelectorAll('[class*="role-label"], [class*="sender"]').forEach(el => el.remove());
@@ -156,17 +152,16 @@ const ClaudeExtractor = {
   },
 
   getTitle() {
-    // Try to get title from sidebar or header
-    const titleEl = document.querySelector('[class*="conversation-title"], [class*="chat-title"], [class*="thread-title"]');
-
-    if (titleEl) {
-      return titleEl.textContent?.trim() || null;
-    }
-
-    // Check page title
+    // Check page title — Claude.ai sets it to the conversation title
     const pageTitle = document.title;
     if (pageTitle && !pageTitle.toLowerCase().includes('claude')) {
       return pageTitle;
+    }
+
+    // Try to get title from sidebar or header
+    const titleEl = document.querySelector('[class*="conversation-title"], [class*="chat-title"], [class*="thread-title"]');
+    if (titleEl) {
+      return titleEl.textContent?.trim() || null;
     }
 
     return null;
