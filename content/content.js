@@ -4,6 +4,10 @@
 (function() {
   'use strict';
 
+  // Prevent duplicate injection (e.g. manual re-injection in incognito)
+  if (window.__aiTakeoutLoaded) return;
+  window.__aiTakeoutLoaded = true;
+
   // List of available extractors (in priority order)
   const extractors = [
     window.ChatGPTExtractor,
