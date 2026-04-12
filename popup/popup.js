@@ -536,7 +536,31 @@ ${conversationText}`
       }
 
       // Request conversation data from content script
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'GET_CONVERSATION' });
+      let response;
+      try {
+        response = await chrome.tabs.sendMessage(tab.id, { action: 'GET_CONVERSATION' });
+      } catch (e) {
+        // Content script not injected (common in incognito) — inject manually and retry
+        console.log('[AI Takeout] Content script not found, injecting manually...');
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: [
+              'content/extractors/chatgpt.js',
+              'content/extractors/gemini.js',
+              'content/extractors/perplexity.js',
+              'content/extractors/claude.js',
+              'content/extractors/generic.js',
+              'content/content.js'
+            ]
+          });
+          response = await chrome.tabs.sendMessage(tab.id, { action: 'GET_CONVERSATION' });
+        } catch (retryError) {
+          console.error('Error after manual injection:', retryError);
+          this.showError('Could not connect to page. Try refreshing.');
+          return;
+        }
+      }
 
       if (!response || !response.success) {
         this.showError(response?.error || 'Failed to extract conversation');
